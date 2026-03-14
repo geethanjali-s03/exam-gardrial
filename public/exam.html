@@ -188,12 +188,21 @@ let questions=[]
 let time=300
 let timer
 
+/* ---------- IDLE DETECTION VARIABLES ---------- */
+
+let lastActivity = Date.now()
+let idleLimit = 60000
+
+/* ---------------------------------------------- */
+
 const subjectsBySem={
 1:["C Programming","Python"],
 2:["Java","Data Structures"],
 3:["Operating Systems","DBMS"],
 4:["Machine Learning","Computer Networks"]
 }
+
+/* ---------- QUESTION BANK ---------- */
 
 const questionBank={
 
@@ -303,6 +312,8 @@ const questionBank={
 
 }
 
+/* ---------- LOAD SUBJECTS ---------- */
+
 function loadSubjects(){
 
 let sem=document.getElementById("sem").value
@@ -318,6 +329,8 @@ subject.appendChild(opt)
 })
 
 }
+
+/* ---------- TIMER ---------- */
 
 function startTimer(){
 
@@ -337,6 +350,8 @@ if(time<=0) submitExam()
 
 }
 
+/* ---------- TRUST SYSTEM ---------- */
+
 function reduceTrust(msg){
 
 trust-=5
@@ -349,7 +364,39 @@ let li=document.createElement("li")
 li.innerText=msg
 document.getElementById("logs").appendChild(li)
 
+if(trust<=50){
+terminateExam("Too many suspicious activities detected")
 }
+
+}
+
+/* ---------- IDLE DETECTION ---------- */
+
+function resetActivity(){
+lastActivity = Date.now()
+}
+
+document.addEventListener("mousemove",resetActivity)
+document.addEventListener("keydown",resetActivity)
+document.addEventListener("click",resetActivity)
+
+setInterval(()=>{
+
+if(!examStarted) return
+
+let now=Date.now()
+
+if(now-lastActivity>idleLimit){
+
+reduceTrust("User idle for more than 60 seconds")
+
+lastActivity=Date.now()
+
+}
+
+},5000)
+
+/* ---------- CHEATING DETECTION ---------- */
 
 document.addEventListener("keydown",e=>{
 
@@ -382,36 +429,7 @@ terminateExam("Tab switch detected")
 
 })
 
-window.addEventListener("resize",()=>{
-
-if(!examStarted) return
-
-if(window.innerWidth/screen.width<0.8)
-reduceTrust("Window resized")
-
-})
-
-function terminateExam(reason){
-
-clearInterval(timer)
-
-alert(reason)
-
-const video=document.getElementById("cam")
-
-if(video.srcObject){
-video.srcObject.getTracks().forEach(track=>track.stop())
-}
-
-document.body.innerHTML=`
-<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#111;color:white;flex-direction:column;text-align:center">
-<h1>🚫 Exam Terminated</h1>
-<p>${reason}</p>
-<p>You are not allowed to continue this exam.</p>
-</div>
-`
-
-}
+/* ---------- EXAM START ---------- */
 
 function startExam(){
 
@@ -435,6 +453,8 @@ renderQuestions()
 startCamera()
 
 }
+
+/* ---------- QUESTIONS ---------- */
 
 function renderQuestions(){
 
@@ -483,6 +503,8 @@ function scrollQ(i){
 document.getElementById("q"+i).scrollIntoView({behavior:"smooth"})
 }
 
+/* ---------- CAMERA AI ---------- */
+
 async function startCamera(){
 
 const video=document.getElementById("cam")
@@ -505,6 +527,8 @@ reduceTrust("Phone detected")
 
 }
 
+/* ---------- MARKS ---------- */
+
 function calculateMarks(){
 
 let score=0
@@ -526,15 +550,40 @@ return score
 
 }
 
+/* ---------- SUBMIT ---------- */
+
 function submitExam(){
 
 clearInterval(timer)
 
 let marks=calculateMarks()
 
-alert("Exam Submitted\nYour Score: "+marks+" / 5")
+alert("Exam Submitted\nScore: "+marks+" / 5")
 
 location.reload()
+
+}
+
+/* ---------- TERMINATE ---------- */
+
+function terminateExam(reason){
+
+clearInterval(timer)
+
+alert(reason)
+
+const video=document.getElementById("cam")
+
+if(video.srcObject){
+video.srcObject.getTracks().forEach(track=>track.stop())
+}
+
+document.body.innerHTML=`
+<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#111;color:white;flex-direction:column;text-align:center">
+<h1>🚫 Exam Terminated</h1>
+<p>${reason}</p>
+</div>
+`
 
 }
 
