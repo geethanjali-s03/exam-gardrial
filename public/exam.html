@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>AI Secure Examination System</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+<style>
+
+*{margin:0;padding:0;box-sizing:border-box;font-family:Segoe UI}
+
+body{
+background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+color:white;
+min-height:100vh;
+}
+
+.header{
+display:flex;
+justify-content:space-between;
+padding:20px;
+background:rgba(0,0,0,0.6);
+}
+
+.timer{
+font-size:28px;
+color:#00ffd5;
+}
+
+.container{
+display:flex;
+gap:25px;
+padding:25px;
+}
+
+.exam{
+flex:3;
+background:rgba(255,255,255,0.08);
+padding:25px;
+border-radius:12px;
+}
+
+.sidebar{
+flex:1;
+background:rgba(0,0,0,0.5);
+padding:20px;
+border-radius:12px;
+}
+
+.question{
+background:white;
+color:black;
+padding:20px;
+margin-bottom:15px;
+border-radius:10px;
+}
+
+button{
+padding:10px 20px;
+border:none;
+background:#36d1dc;
+color:white;
+border-radius:6px;
+cursor:pointer;
+margin-top:10px;
+}
+
+textarea{
+width:100%;
+padding:10px;
+margin-top:10px;
+}
+
+.trustBar{
+width:100%;
+height:12px;
+background:#333;
+border-radius:10px;
+overflow:hidden;
+}
+
+.trustFill{
+height:100%;
+background:linear-gradient(90deg,#00ff87,#60efff);
+width:100%;
+}
+
+.navGrid{
+display:grid;
+grid-template-columns:repeat(5,1fr);
+gap:5px;
+margin-top:10px;
+}
+
+.navGrid button{
+background:#2c5364;
+padding:6px;
+}
+
+.navGrid button.answered{
+background:#00c853;
+}
+
+video{
+position:fixed;
+bottom:20px;
+right:20px;
+width:170px;
+border:3px solid white;
+border-radius:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+<h2>AI Secure Exam</h2>
+<div id="timer" class="timer">05:00</div>
+</div>
+
+<div class="container">
+
+<div class="exam">
+
+<label>Semester</label><br>
+
+<select id="sem" onchange="loadSubjects()">
+<option value="">Select</option>
+<option value="1">Semester 1</option>
+<option value="2">Semester 2</option>
+<option value="3">Semester 3</option>
+<option value="4">Semester 4</option>
+</select>
+
+<br><br>
+
+<label>Subject</label><br>
+
+<select id="subject">
+<option value="">Select Subject</option>
+</select>
+
+<br>
+
+<button onclick="startExam()">Start Exam</button>
+
+<br><br>
+
+<div id="questions"></div>
+
+<button onclick="submitExam()">Submit Exam</button>
+
+</div>
+
+<div class="sidebar">
+
+<h3>Trust Score</h3>
+
+<p id="trust">100</p>
+
+<div class="trustBar">
+<div id="trustFill" class="trustFill"></div>
+</div>
+
+<h3 style="margin-top:20px">Navigator</h3>
+
+<div id="nav" class="navGrid"></div>
+
+<h3 style="margin-top:20px">Violations</h3>
+
+<ul id="logs"></ul>
+
+</div>
+
+</div>
+
+<video id="cam" autoplay muted></video>
+
+<script>
+
+let trust=100
+let examStarted=false
+let questions=[]
+let time=300
+let timer
+
+const subjectsBySem={
+1:["C Programming","Python"],
+2:["Java","Data Structures"],
+3:["Operating Systems","DBMS"],
+4:["Machine Learning","Computer Networks"]
+}
+
+const questionBank={
+
+"C Programming":[
+{type:"mcq",q:"C statement ends with?",options:[";","{}","#","()"]},
+{type:"mcq",q:"Which function prints output?",options:["scanf","printf","echo","print"]},
+{type:"mcq",q:"Which datatype stores characters?",options:["int","char","float","double"]},
+{type:"mcq",q:"Address operator?",options:["*","&","%","#"]},
+{type:"mcq",q:"Loop keyword?",options:["for","repeat","iterate","loop"]},
+{type:"qa",q:"Explain pointer"},
+{type:"qa",q:"Explain arrays"},
+{type:"qa",q:"Explain structures"},
+{type:"qa",q:"Explain functions"},
+{type:"qa",q:"Explain dynamic memory allocation"}
+],
+
+"Python":[
+{type:"mcq",q:"Function keyword?",options:["def","create","fun","lambda"]},
+{type:"mcq",q:"Power operator?",options:["^","**","%","//"]},
+{type:"mcq",q:"Python is?",options:["Compiled","Interpreted","Binary","Assembly"]},
+{type:"mcq",q:"Which datatype stores multiple values?",options:["list","char","float","int"]},
+{type:"mcq",q:"Loop keyword?",options:["for","repeat","iterate","loop"]},
+{type:"qa",q:"Explain list"},
+{type:"qa",q:"Explain tuple"},
+{type:"qa",q:"Explain dictionary"},
+{type:"qa",q:"Explain lambda function"},
+{type:"qa",q:"Explain Python interpreter"}
+],
+
+"Java":[
+{type:"mcq",q:"Java is?",options:["Compiled","Interpreted","Both","None"]},
+{type:"mcq",q:"Java main method?",options:["main()","start()","run()","execute()"]},
+{type:"mcq",q:"Parent class keyword?",options:["extends","implements","inherits","super"]},
+{type:"mcq",q:"Java platform?",options:["JVM","CPU","Compiler","IDE"]},
+{type:"mcq",q:"OOP stands for?",options:["Object Oriented Programming","Open Operation Program","Object Operation Process","None"]},
+{type:"qa",q:"Explain OOP concepts"},
+{type:"qa",q:"Explain inheritance"},
+{type:"qa",q:"Explain polymorphism"},
+{type:"qa",q:"Explain Java Virtual Machine"},
+{type:"qa",q:"Explain exception handling"}
+],
+
+"Data Structures":[
+{type:"mcq",q:"Stack follows?",options:["FIFO","LIFO","Random","None"]},
+{type:"mcq",q:"Queue follows?",options:["LIFO","FIFO","Stack","None"]},
+{type:"mcq",q:"Binary tree max children?",options:["2","3","4","1"]},
+{type:"mcq",q:"Which DS uses nodes?",options:["Linked list","Array","Stack","Queue"]},
+{type:"mcq",q:"Search algorithm?",options:["Binary search","Bubble","Merge","Heap"]},
+{type:"qa",q:"Explain stack"},
+{type:"qa",q:"Explain queue"},
+{type:"qa",q:"Explain linked list"},
+{type:"qa",q:"Explain binary tree"},
+{type:"qa",q:"Explain hashing"}
+],
+
+"Operating Systems":[
+{type:"mcq",q:"OS manages?",options:["Hardware","Software","Both","None"]},
+{type:"mcq",q:"Process scheduling type?",options:["FCFS","Bubble","Binary","Stack"]},
+{type:"mcq",q:"Memory management technique?",options:["Paging","Sorting","Searching","Looping"]},
+{type:"mcq",q:"Deadlock occurs when?",options:["Resources blocked","CPU idle","Memory full","None"]},
+{type:"mcq",q:"Kernel is?",options:["Core of OS","Application","Compiler","Driver"]},
+{type:"qa",q:"Explain process"},
+{type:"qa",q:"Explain scheduling algorithms"},
+{type:"qa",q:"Explain deadlock"},
+{type:"qa",q:"Explain virtual memory"},
+{type:"qa",q:"Explain paging"}
+],
+
+"DBMS":[
+{type:"mcq",q:"DBMS stands for?",options:["Database Management System","Data Binary Management System","Database Memory System","None"]},
+{type:"mcq",q:"Primary key?",options:["Unique identifier","Duplicate key","Index","None"]},
+{type:"mcq",q:"SQL command to retrieve?",options:["SELECT","INSERT","UPDATE","DELETE"]},
+{type:"mcq",q:"Normalization removes?",options:["Redundancy","Tables","Rows","Columns"]},
+{type:"mcq",q:"ER diagram represents?",options:["Entities and relationships","Rows","Tables","Queries"]},
+{type:"qa",q:"Explain normalization"},
+{type:"qa",q:"Explain ACID properties"},
+{type:"qa",q:"Explain relational model"},
+{type:"qa",q:"Explain ER model"},
+{type:"qa",q:"Explain indexing"}
+],
+
+"Machine Learning":[
+{type:"mcq",q:"ML type?",options:["Supervised","Unsupervised","Reinforcement","All"]},
+{type:"mcq",q:"Regression predicts?",options:["Numbers","Categories","Images","Text"]},
+{type:"mcq",q:"Classification predicts?",options:["Categories","Numbers","Graphs","Tables"]},
+{type:"mcq",q:"Overfitting occurs when?",options:["Model too complex","Model simple","Data small","None"]},
+{type:"mcq",q:"Algorithm example?",options:["Decision tree","Sorting","Searching","Loop"]},
+{type:"qa",q:"Explain supervised learning"},
+{type:"qa",q:"Explain unsupervised learning"},
+{type:"qa",q:"Explain neural networks"},
+{type:"qa",q:"Explain model training"},
+{type:"qa",q:"Explain overfitting"}
+],
+
+"Computer Networks":[
+{type:"mcq",q:"OSI layers?",options:["7","5","4","6"]},
+{type:"mcq",q:"IP stands for?",options:["Internet Protocol","Internal Program","Input Process","None"]},
+{type:"mcq",q:"HTTP used for?",options:["Web communication","File storage","Memory","CPU"]},
+{type:"mcq",q:"Router connects?",options:["Networks","Programs","Files","Users"]},
+{type:"mcq",q:"LAN stands for?",options:["Local Area Network","Large Access Network","Low Area Network","None"]},
+{type:"qa",q:"Explain OSI model"},
+{type:"qa",q:"Explain TCP/IP model"},
+{type:"qa",q:"Explain network topology"},
+{type:"qa",q:"Explain routing"},
+{type:"qa",q:"Explain network security"}
+]
+
+}
+
+function loadSubjects(){
+
+let sem=document.getElementById("sem").value
+let subject=document.getElementById("subject")
+
+subject.innerHTML='<option value="">Select Subject</option>'
+
+subjectsBySem[sem].forEach(s=>{
+let opt=document.createElement("option")
+opt.value=s
+opt.innerText=s
+subject.appendChild(opt)
+})
+
+}
+
+function startTimer(){
+
+timer=setInterval(()=>{
+
+time--
+
+let m=Math.floor(time/60)
+let s=time%60
+
+document.getElementById("timer").innerText=
+m+":"+(s<10?"0":"")+s
+
+if(time<=0) submitExam()
+
+},1000)
+
+}
+
+function reduceTrust(msg){
+
+trust-=5
+if(trust<0) trust=0
+
+document.getElementById("trust").innerText=trust
+document.getElementById("trustFill").style.width=trust+"%"
+
+let li=document.createElement("li")
+li.innerText=msg
+document.getElementById("logs").appendChild(li)
+
+}
+
+document.addEventListener("keydown",e=>{
+
+if(!examStarted) return
+
+if(e.key==="Escape"){
+e.preventDefault()
+reduceTrust("ESC pressed")
+}
+
+if(e.key==="F12"){
+e.preventDefault()
+reduceTrust("F12 attempt")
+}
+
+if(e.ctrlKey && ["c","v","u"].includes(e.key.toLowerCase())){
+e.preventDefault()
+reduceTrust("Copy/Paste attempt")
+}
+
+})
+
+document.addEventListener("visibilitychange",()=>{
+
+if(!examStarted) return
+
+if(document.hidden){
+terminateExam("Tab switch detected")
+}
+
+})
+
+window.addEventListener("resize",()=>{
+
+if(!examStarted) return
+
+if(window.innerWidth/screen.width<0.8)
+reduceTrust("Window resized")
+
+})
+
+function terminateExam(reason){
+
+clearInterval(timer)
+
+alert(reason)
+
+const video=document.getElementById("cam")
+
+if(video.srcObject){
+video.srcObject.getTracks().forEach(track=>track.stop())
+}
+
+document.body.innerHTML=`
+<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#111;color:white;flex-direction:column;text-align:center">
+<h1>🚫 Exam Terminated</h1>
+<p>${reason}</p>
+<p>You are not allowed to continue this exam.</p>
+</div>
+`
+
+}
+
+function startExam(){
+
+let subject=document.getElementById("subject").value
+
+if(!subject){
+alert("Select subject")
+return
+}
+
+questions=[...questionBank[subject]]
+
+examStarted=true
+
+document.documentElement.requestFullscreen()
+
+startTimer()
+
+renderQuestions()
+
+startCamera()
+
+}
+
+function renderQuestions(){
+
+let div=document.getElementById("questions")
+let nav=document.getElementById("nav")
+
+div.innerHTML=""
+nav.innerHTML=""
+
+questions.forEach((q,i)=>{
+
+nav.innerHTML+=`<button onclick="scrollQ(${i})">${i+1}</button>`
+
+let html=`<div class="question" id="q${i}">
+<p>${i+1}. ${q.q}</p>`
+
+if(q.type==="mcq"){
+
+q.options.forEach((o,j)=>{
+html+=`
+<label>
+<input type="radio" name="q${i}" value="${j}" onchange="markAnswered(${i})">
+${o}
+</label><br>`
+})
+
+}else{
+
+html+=`<textarea onchange="markAnswered(${i})"></textarea>`
+
+}
+
+html+="</div>"
+
+div.innerHTML+=html
+
+})
+
+}
+
+function markAnswered(i){
+document.querySelectorAll("#nav button")[i].classList.add("answered")
+}
+
+function scrollQ(i){
+document.getElementById("q"+i).scrollIntoView({behavior:"smooth"})
+}
+
+async function startCamera(){
+
+const video=document.getElementById("cam")
+
+const stream=await navigator.mediaDevices.getUserMedia({video:true})
+video.srcObject=stream
+
+const model=await cocoSsd.load()
+
+setInterval(async()=>{
+
+const preds=await model.detect(video)
+
+preds.forEach(p=>{
+if(p.class==="cell phone")
+reduceTrust("Phone detected")
+})
+
+},3000)
+
+}
+
+function calculateMarks(){
+
+let score=0
+
+questions.forEach((q,i)=>{
+
+if(q.type==="mcq"){
+
+let selected=document.querySelector(`input[name="q${i}"]:checked`)
+
+if(selected && parseInt(selected.value)===q.answer)
+score++
+
+}
+
+})
+
+return score
+
+}
+
+function submitExam(){
+
+clearInterval(timer)
+
+let marks=calculateMarks()
+
+alert("Exam Submitted\nYour Score: "+marks+" / 5")
+
+location.reload()
+
+}
+
+</script>
+
+</body>
+</html>
